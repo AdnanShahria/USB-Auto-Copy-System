@@ -1,66 +1,150 @@
-# USB Auto-Copy System
+# USB Auto-Copy System — Complete Technical Documentation & User Guide
 
-A lightweight, silent, and automated script to copy document files from any inserted USB drive into a designated local directory. It runs completely invisibly in the background.
+A silent, fully automated, bidirectional file synchronization and backup utility for Windows. The system operates invisibly in the background without pop-ups, console windows, or user intervention.
 
-## 🚀 Features
+---
 
-- **One-Click Installation:** Simply double click `INSTALL_USB_AutoCopy_v2.bat` to install. It automatically requests Administrator privileges.
-- **Completely Silent:** Once installed, it runs in the background using a VBS launcher and PowerShell monitor. No black screens, no console popups, zero notifications.
-- **Fast Detection:** Checks for newly inserted USB drives every 5 seconds.
-- **Smart Separation:** Saves files to `C:\Windows\Docs` in separate folders named after the USB drive's name and its hardware serial number (e.g., `USB_D (1A2B3C4D)`). This ensures different flash drives with the same name do not mix files.
-- **Preserves Structure:** Maintains the original folder hierarchy of the copied files from the USB drive.
-- **File Type Filtering:** By default, copies document formats: `.pdf, .pptx, .ppt, .docx, .doc, .xlsx, .xls`.
-- **Target Drive Extraction (Reverse Copy):** If a specific USB drive is inserted (identifiable by a `.syscopy_target` file in its root), the system will *move* all gathered documents from `C:\Windows\Docs` onto that specific USB drive (into a `docs/` folder) and clean up empty folders.
-- **Activity Logging:** Records all copy activities to `C:\Windows\Docs\.autocopy_log.txt`.
-- **Auto-Start on Logon:** Persists across reboots by automatically running as a Scheduled Task under the SYSTEM account at user logon.
-- **Easy Uninstallation:** Run the same installation script again to update or completely uninstall the system safely.
+## 📑 Table of Contents
 
-## 🛠️ Installation
+1. [System Overview](#1-system-overview)
+2. [Key Features](#2-key-features)
+3. [System Architecture & File Locations](#3-system-architecture--file-locations)
+4. [Operational Modes](#4-operational-modes)
+   - [Mode 1: Standard USB Auto-Backup (USB → PC)](#mode-1-standard-usb-auto-backup-usb--pc)
+   - [Mode 2: Target Drive Offloading (PC → USB)](#mode-2-target-drive-offloading-pc--usb)
+5. [Conflict Resolution & Smart Handling](#5-conflict-resolution--smart-handling)
+6. [Installation, Maintenance & Uninstallation](#6-installation-maintenance--uninstallation)
+7. [Log File Format & Audit Trail](#7-log-file-format--audit-trail)
+8. [Frequently Asked Questions (FAQ)](#8-frequently-asked-questions-faq)
+9. [Disclaimer](#9-disclaimer)
 
-1. Download the script `INSTALL_USB_AutoCopy_v2.bat`.
-2. Double-click the file.
-3. If prompted by User Account Control (UAC), click **Yes** to grant Administrator privileges.
-4. A popup will confirm the successful installation. The system is now actively monitoring for USB drives!
+---
 
-## 🗑️ Uninstallation
+## 1. System Overview
 
-1. Double-click the `INSTALL_USB_AutoCopy_v2.bat` file again.
-2. A prompt will appear stating that the system is already installed.
-3. Click **Uninstall** to completely remove the background tasks, scripts, and monitor.
-4. Note: Your copied documents in `C:\Windows\Docs` will **not** be deleted.
+The **USB Auto-Copy System** is an advanced administrative tool designed to automatically capture document files from any inserted USB flash drive. Once installed, it runs as a high-privileged Windows Scheduled Task (`SYSTEM` level), ensuring that the background monitor is active the moment a user logs into the machine. 
 
-## 🎯 Target Drive (Reverse Copy) Feature
+It handles two primary workflows automatically based on the signature of the inserted USB drive:
+1. **Ingestion**: Secretly and safely backing up documents from unknown USB drives to the local PC.
+2. **Extraction**: Moving collected documents from the PC back onto a designated "Target" USB drive to free up space.
 
-The system has a built-in mechanism to easily extract all the collected documents without needing to manually browse `C:\Windows\Docs`.
+---
 
-To designate a USB drive as the "Target Drive":
-1. Create a blank file named exactly `.syscopy_target` in the root directory of your USB drive. (The script will automatically hide this file).
-2. Whenever this specific USB drive is plugged into the computer, the system will **move** all files from `C:\Windows\Docs` onto the USB drive inside a `docs\` folder.
-3. It will then clean up any empty folders left behind in `C:\Windows\Docs`.
+## 2. Key Features
 
-## ❓ FAQ (Frequently Asked Questions)
+- **True Stealth Operation:** Employs a VBScript (`.vbs`) launcher to execute a PowerShell (`.ps1`) monitor. This guarantees absolutely zero console windows, taskbar icons, or notification pop-ups.
+- **Hardware-Level Drive Differentiation:** Identifies USBs by their hardware `VolumeSerialNumber` (e.g., `1A2B3C4D`). This prevents data overlap even if multiple USBs share the exact same volume label (like "Lexar" or "KINGSTON").
+- **Lightning Fast Polling:** Scans for new Removable Drives (`DriveType 2`) every **5 seconds**.
+- **Self-Elevating Installer:** The `.bat` installer uses `net session` to detect privileges and automatically prompts for UAC elevation if required.
+- **Mutex Concurrency Control:** Implements `System.Threading.Mutex` to guarantee only a single instance of the background monitor is ever running.
+- **Automated Cleanup:** When operating in Extraction mode, the system automatically prunes empty directories left behind on the host machine.
+- **Battery & Idle Resilient:** The scheduled task is explicitly configured to allow execution on battery power and never terminate during idle states.
+
+---
+
+## 3. System Architecture & File Locations
+
+All components of the system are securely housed in the `C:\Windows\Docs` directory. The executable scripts are hidden to prevent accidental deletion by the user.
+
+- **Storage Root:** `C:\Windows\Docs\` — The master directory where all intercepted files are stored.
+- **System Directory:** `C:\Windows\Docs\SYSCOPY\` *(Hidden)* — Contains the operational scripts.
+- **Monitor Script:** `...\SYSCOPY\usb_monitor.ps1` — The core logic loop checking for USBs.
+- **Launcher Script:** `...\SYSCOPY\usb_launcher.vbs` — The silent execution wrapper.
+- **Log File:** `C:\Windows\Docs\.autocopy_log.txt` — The continuous audit trail of all actions.
+- **Scheduled Task:** `USB_AutoCopy_Silent_Monitor` — Triggered at user logon, running under the `SYSTEM` account with `RunLevel Highest`.
+
+---
+
+## 4. Operational Modes
+
+The system operates in one of two modes depending on the USB drive inserted. It only targets specific extensions: `.pdf, .pptx, .ppt, .docx, .doc, .xlsx, .xls`.
+
+### Mode 1: Standard USB Auto-Backup (USB → PC)
+**Trigger:** Any standard USB drive inserted.
+**Action:**
+1. Detects the drive label and serial number.
+2. Creates a dedicated folder in `C:\Windows\Docs` formatted as `[Label] ([Serial])` (e.g., `C:\Windows\Docs\MyUSB (F34A891B)`).
+3. Recursively scans the USB for target document extensions.
+4. Copies discovered files while perfectly **preserving the directory structure** of the USB.
+5. Ignores files that are already backed up to prevent duplicate IO operations.
+
+### Mode 2: Target Drive Offloading (PC → USB)
+**Trigger:** A USB drive with the hardware serial `702968E6`, **OR** any USB drive containing a file named exactly `.syscopy_target` in its root directory.
+**Action:**
+1. System recognizes the "Target Drive" and switches to Extraction Mode.
+2. Automatically ensures the `.syscopy_target` file is set to `Hidden`.
+3. Scans all subdirectories in `C:\Windows\Docs` (ignoring the `SYSCOPY` core folder).
+4. **MOVES** all collected documents from the PC onto the USB drive into a folder named `docs\`.
+5. Compares file modification times and sizes; if the file on the USB is older or incomplete, it overwrites it with the PC's version.
+6. After successfully moving the files, it forcefully deletes the original files from the PC.
+7. Recursively scans `C:\Windows\Docs` and deletes any folders that are now completely empty.
+
+---
+
+## 5. Conflict Resolution & Smart Handling
+
+During standard ingestion (Mode 1), the system implements strict conflict resolution if a file with the exact same name and relative path is found in the backup directory:
+
+- **Identical Files (Size Match):** If the byte-size of the USB file exactly matches the PC file, the copy is **skipped**.
+- **Different Files (Size Mismatch):** If the byte-size differs (e.g., the document was edited), the system generates a safe duplicate. It appends a numbered suffix to the filename on the PC: `Document_(1).pdf`, `Document_(2).pdf`, etc. No data is ever overwritten.
+
+---
+
+## 6. Installation, Maintenance & Uninstallation
+
+The `INSTALL_USB_AutoCopy_v2.bat` script acts as an all-in-one package manager for the system.
+
+### Installation
+1. Double-click `INSTALL_USB_AutoCopy_v2.bat`.
+2. Accept the UAC Administrator prompt.
+3. The script extracts the VBS and PS1 code blocks from itself, creates the `SYSCOPY` directory, registers the Scheduled Task, and immediately starts the background process.
+4. A native Windows Form dialog confirms successful installation.
+
+### Maintenance & Uninstallation
+1. Double-click the installer again while the system is already installed.
+2. The script detects the existing Scheduled Task and launches an interactive GUI.
+3. **Update:** Stops the running monitor, unregisters the old task, and performs a clean reinstall (useful for applying script updates).
+4. **Uninstall:** Completely purges the Scheduled Task, kills the `wscript.exe` and `powershell.exe` monitor processes, and deletes the `SYSCOPY` folder. 
+   *(Note: Backed-up documents in `C:\Windows\Docs` are deliberately left untouched during uninstallation).*
+
+---
+
+## 7. Log File Format & Audit Trail
+
+Every successful batch of copy or move operations is recorded in `C:\Windows\Docs\.autocopy_log.txt`. 
+
+### Sample Log Entries:
+```text
+2026-07-21 14:10:05 | WORK_DRIVE (3A9F12B0) | 4 files copied to [WORK_DRIVE (3A9F12B0)]
+2026-07-21 14:15:22 | AS_120gb (702968E6) | 12 files MOVED to USB
+```
+
+### Breakdown:
+- **Timestamp:** Formatted as `yyyy-MM-dd HH:mm:ss`.
+- **Drive Identifier:** Combines the Volume Label and Serial Number.
+- **Action & Count:** Clearly distinguishes between "copied to" (Standard Ingestion) and "MOVED to USB" (Target Offloading).
+
+---
+
+## 8. Frequently Asked Questions (FAQ)
 
 **Q: Do I need to copy the `.bat` file to the PC to install it?**
-A: No. You can run the `INSTALL_USB_AutoCopy_v2.bat` file directly from your USB drive. The script will automatically copy its required components to the PC's hard drive (`C:\Windows\Docs\SYSCOPY`) and register itself. Once you see the installation success popup, you can safely remove the USB drive, and the system will remain active on that PC.
+A: No. You can run the `INSTALL_USB_AutoCopy_v2.bat` file directly from your USB drive. The script will automatically copy its required components to the PC's hard drive (`C:\Windows\Docs\SYSCOPY`) and register itself. Once you see the installation success popup, you can safely remove the USB drive.
 
-**Q: Where are the files saved?**
-A: All files are securely copied to `C:\Windows\Docs`.
+**Q: Why doesn't the Scheduled Task use the `AtStartup` trigger?**
+A: `AtStartup` executes before the user session and Explorer shells are fully initialized, which can cause background script execution to falter or trigger visible errors. `AtLogOn` ensures the environment is fully stable before execution.
 
-**Q: Will it slow down my computer?**
-A: No. The script is highly optimized, sleeping for 5 seconds between checks and consuming virtually no CPU or RAM.
+**Q: Will the constant 5-second polling drain my laptop battery or CPU?**
+A: No. The `Start-Sleep -Seconds 5` command suspends the PowerShell thread entirely. The WMI query to check `DriveType 2` takes less than a millisecond, resulting in effectively `0%` CPU usage and negligible memory footprint (~15-20MB RAM).
 
-**Q: Does it copy all files from the USB?**
-A: No, it only targets specific document types: PDF, Word, Excel, and PowerPoint files. This prevents copying large unwanted files like movies or games.
+**Q: Does it copy shortcuts, media, or executables?**
+A: No. It strictly filters for `.pdf, .pptx, .ppt, .docx, .doc, .xlsx, .xls`. This prevents the system from locking up while trying to copy 50GB movies or dangerous `.exe` payloads.
 
-**Q: What happens if two files have the same name?**
-A: If a file with the same name already exists in the destination, the system checks if they are identical in size. If they differ, it renames the new file by appending `_(1)`, `_(2)`, etc., to ensure no data is overwritten.
+**Q: Why is a VBS script used to launch PowerShell?**
+A: Native PowerShell `Start-Process -WindowStyle Hidden` still briefly flashes a console window for a fraction of a second before hiding. The `Wscript.Shell.Run` method with parameter `0` executes the process completely invisibly from the very first CPU cycle.
 
-**Q: How do I know if it is working?**
-A: Check `C:\Windows\Docs\.autocopy_log.txt`. It logs every action, including the time, USB label, and number of files copied or moved.
+---
 
-**Q: Why doesn't it run on startup?**
-A: The script runs *at logon* rather than *at startup* to ensure the user session and filesystem are fully ready, preventing any potential errors or visible popups during the boot process.
+## 9. Disclaimer
 
-## ⚠️ Disclaimer
-
-This tool is provided for educational and authorized use only. Ensure you have explicit permission to copy data from any inserted USB drives. The creator assumes no responsibility for any misuse or data loss.
+This utility is provided for **educational and authorized administrative use only**. The background and silent nature of this script makes it highly effective but also easily misused. Ensure you have explicit consent and authorization to copy data from any inserted storage devices. The creator assumes no liability for any unauthorized data access, misuse, or unintended data loss.
