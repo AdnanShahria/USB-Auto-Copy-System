@@ -17,7 +17,7 @@
 :: ========================================
 :: Auto-Elevate to Administrator
 net session >nul 2>&1
-if %errorLevel% neq 0 (powershell -Command "Start-Process -FilePath '%~f0' -Verb RunAs" & exit /b)
+if %errorLevel% neq 0 (powershell -WindowStyle Hidden -Command "Start-Process -FilePath '%~f0' -Verb RunAs -WindowStyle Hidden" & exit /b)
 set "T=%TEMP%\uac_%RANDOM%.ps1"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$c=Get-Content -LiteralPath '%~f0'; Set-Content -LiteralPath '%T%' -Value $c[23..($c.Count-1)] -Encoding UTF8"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%T%" & del "%T%" 2>nul & exit /b
