@@ -28,7 +28,7 @@ An automated, bidirectional USB document backup and offloading utility for Windo
 
 ## 2. Key Features
 
-- **1-Second Target GUI Toasts:** Displays a non-intrusive bottom-right `Starting...` toast (1s) when a Target USB is plugged in, then `OK` (1s) when finished, then stays quiet until unplugged and reconnected (or until new files arrive).
+- **1-Second Target GUI Toasts:** Displays a compact upper-right `Starting...` toast (1s) when a Target USB is plugged in, then `OK` (1s) when finished, then stays quiet until unplugged and reconnected (or until new files arrive).
 - **Flexible Target Identification (No Marker File Required):** Recognize Target USBs via Hardware Disk Serial, Volume Serial, `LABEL:<Name>` in `targets.txt`, **or** a `.syscopy_target` file in the USB root.
 - **Ignore Support:** Skip personal drives completely via `ignore.txt` or a `.syscopy_ignore` marker file.
 - **Global Single-Instance Mutex:** Uses `Global\USBMonitorMutexV4` with `AbandonedMutexException` recovery.

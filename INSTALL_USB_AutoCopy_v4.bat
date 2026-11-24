@@ -479,25 +479,26 @@ try {
             $form.StartPosition   = [System.Windows.Forms.FormStartPosition]::Manual
             $form.ShowInTaskbar   = $false
             $form.TopMost         = $true
-            $form.Size            = New-Object System.Drawing.Size(210, 62)
+            $form.MinimumSize     = New-Object System.Drawing.Size(1, 1)
+            $form.Size            = New-Object System.Drawing.Size(136, 38)
             $form.BackColor       = [System.Drawing.Color]::FromArgb($r, $g, $b)
 
             $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-            $form.Location = New-Object System.Drawing.Point(($wa.Right - $form.Width - 16), ($wa.Bottom - $form.Height - 16))
+            $form.Location = New-Object System.Drawing.Point(($wa.Right - $form.Width - 12), ($wa.Top + 12))
 
             $lblTitle = New-Object System.Windows.Forms.Label
             $lblTitle.Text      = 'USB'
             $lblTitle.ForeColor = [System.Drawing.Color]::FromArgb(225, 235, 245)
-            $lblTitle.Font      = New-Object System.Drawing.Font('Segoe UI', 8.5, [System.Drawing.FontStyle]::Bold)
-            $lblTitle.Location  = New-Object System.Drawing.Point(14, 9)
+            $lblTitle.Font      = New-Object System.Drawing.Font('Segoe UI', 7.5, [System.Drawing.FontStyle]::Bold)
+            $lblTitle.Location  = New-Object System.Drawing.Point(9, 4)
             $lblTitle.AutoSize  = $true
             $form.Controls.Add($lblTitle)
 
             $lblMsg = New-Object System.Windows.Forms.Label
             $lblMsg.Text      = $message
             $lblMsg.ForeColor = [System.Drawing.Color]::White
-            $lblMsg.Font      = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
-            $lblMsg.Location  = New-Object System.Drawing.Point(14, 27)
+            $lblMsg.Font      = New-Object System.Drawing.Font('Segoe UI', 9.5, [System.Drawing.FontStyle]::Bold)
+            $lblMsg.Location  = New-Object System.Drawing.Point(9, 17)
             $lblMsg.AutoSize  = $true
             $form.Controls.Add($lblMsg)
 
