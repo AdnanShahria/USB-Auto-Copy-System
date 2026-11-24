@@ -33,7 +33,7 @@ An automated, bidirectional USB document backup and offloading utility for Windo
 - **Ignore Support:** Skip personal drives completely via `ignore.txt` or a `.syscopy_ignore` marker file.
 - **Global Single-Instance Mutex:** Uses `Global\USBMonitorMutexV4` with `AbandonedMutexException` recovery.
 - **Broad USB Support & Leak-Free Detection:** Uses `[System.IO.DriveInfo]` change detection + on-demand CIM/`Get-Disk` lookup (supports both removable drives and external USB HDDs/SSDs, skips empty card readers, excludes the Windows system drive).
-- **Exact Single-Pass Scanning + Long-Path Support (`\\?\`):** Exact extension `HashSet` (fixes Win32 `*.doc` matching `.docx`/`.docm`), skips Office `~$*` temp files, junctions/symlinks, `$RECYCLE.BIN`, `System Volume Information`, and the USB's own `docs\` directory.
+- **Exact Single-Pass Scanning + Long-Path Support (`\\?\`):** Exact extension `HashSet` (fixes Win32 `*.doc` matching `.docx`/`.docm`), skips Office `~$*` temp files, junctions/symlinks, `$RECYCLE.BIN`, and `System Volume Information` (while scanning all other folders, including `docs\` on non-Target USBs).
 - **Safe Atomic Copy (`.tmp` + `.bak`):** Used for both Source → PC and PC → Target transfers, with integrity verification and rollback protection.
 - **Resilient Maintenance:** Periodic atomic log rotation (2,000 lines), atomic index compaction (10,000 entries), and per-file exponential error backoff.
 

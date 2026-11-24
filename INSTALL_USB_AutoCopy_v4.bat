@@ -351,7 +351,22 @@ try {
 } catch {}
 Protect-InstallDirectory $InstallDir
 
-# Migrate legacy index if updating from previous install paths
+# Migrate legacy docs & index if updating from C:\ProgramData\USBAutoCopy
+$legacyDocsDir = 'C:\ProgramData\USBAutoCopy\docs'
+if (Test-Path -LiteralPath $legacyDocsDir) {
+    try {
+        foreach ($item in @(Get-ChildItem -LiteralPath $legacyDocsDir -Force -ErrorAction SilentlyContinue)) {
+            $targetItemPath = Join-Path $DocsDir $item.Name
+            if (-not (Test-Path -LiteralPath $targetItemPath)) {
+                Move-Item -LiteralPath $item.FullName -Destination $targetItemPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+        if (@(Get-ChildItem -LiteralPath $legacyDocsDir -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+            Remove-Item -LiteralPath $legacyDocsDir -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
+}
+
 if (-not (Test-Path -LiteralPath $IndexFile)) {
     foreach ($legDir in $LegacySysDirs) {
         $legIdx = Join-Path $legDir 'systemcopydocs.index'
@@ -617,12 +632,16 @@ try {
     }
 
     # ============================================================
-    # SINGLE-PASS FILE ENUMERATOR
+    # SINGLE-PASS FILE ENUMERATOR (with diagnostics & error logging)
     # ============================================================
+    $script:LastScanStats = @{ Dirs = 0; TotalFiles = 0; Matched = 0; ExcludedDocs = 0; ScanErrors = 0 }
+
     function Get-MatchingFiles([string]$rootDir, [string]$excludeDir) {
         $results = New-Object System.Collections.Generic.List[System.IO.FileInfo]
         $stack   = New-Object System.Collections.Generic.Stack[string]
         $stack.Push($rootDir)
+
+        $stats = @{ Dirs = 0; TotalFiles = 0; Matched = 0; ExcludedDocs = 0; ScanErrors = 0 }
 
         $normExclude = $null
         if (-not [string]::IsNullOrEmpty($excludeDir)) {
@@ -635,22 +654,31 @@ try {
                 $normCur = $current.TrimEnd('\') + '\'
                 if ($normCur.Equals($normExclude, [System.StringComparison]::OrdinalIgnoreCase) -or
                     $normCur.StartsWith($normExclude, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $stats.ExcludedDocs++
                     continue
                 }
             }
 
+            $stats.Dirs++
             $lpCurrent = ConvertTo-SafePath $current
             try {
                 foreach ($fPath in [System.IO.Directory]::EnumerateFiles($lpCurrent)) {
+                    $stats.TotalFiles++
                     try {
                         $fi = New-Object System.IO.FileInfo($fPath)
                         if ($fi.Name.StartsWith('~$')) { continue }
                         if ($AllowedExts.Contains($fi.Extension)) {
                             $results.Add($fi)
+                            $stats.Matched++
                         }
-                    } catch {}
+                    } catch {
+                        $stats.ScanErrors++
+                    }
                 }
-            } catch {}
+            } catch {
+                $stats.ScanErrors++
+                Write-Log ('SCAN FILE ERROR [' + $current + ']: ' + $_.Exception.Message)
+            }
 
             try {
                 foreach ($dPath in [System.IO.Directory]::EnumerateDirectories($lpCurrent)) {
@@ -659,10 +687,16 @@ try {
                         if (($di.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
                         if ($di.Name -ieq '$RECYCLE.BIN' -or $di.Name -ieq 'System Volume Information') { continue }
                         $stack.Push((Strip-LongPathPrefix $di.FullName))
-                    } catch {}
+                    } catch {
+                        $stats.ScanErrors++
+                    }
                 }
-            } catch {}
+            } catch {
+                $stats.ScanErrors++
+                Write-Log ('SCAN DIR ERROR [' + $current + ']: ' + $_.Exception.Message)
+            }
         }
+        $script:LastScanStats = $stats
         return ,$results
     }
 
@@ -933,6 +967,7 @@ try {
     $script:LastDriveSignature = ''
     $script:CachedUsbDrives    = @()
     $script:TargetNotified     = @{}
+    $script:SourceLogged       = @{}
 
     function Get-ReadyUsbDrives {
         $readyDrives = @([System.IO.DriveInfo]::GetDrives() | Where-Object {
@@ -973,12 +1008,18 @@ try {
             $driveMetaById[$id] = @{ DriveType = $d.DriveType; Root = $d.Name; Label = $lbl }
         }
 
-        # Clear TargetNotified entries for unplugged drives so next plug-in shows Starting -> OK again
+        # Clear TargetNotified & SourceLogged entries for unplugged drives
         $staleNotif = @($script:TargetNotified.Keys | Where-Object {
             $did = $_.Split('|')[0]
             -not $readySet.Contains($did)
         })
         foreach ($sn in $staleNotif) { $script:TargetNotified.Remove($sn) }
+
+        $staleSrc = @($script:SourceLogged.Keys | Where-Object {
+            $did = $_.Split('|')[0]
+            -not $readySet.Contains($did)
+        })
+        foreach ($ss in $staleSrc) { $script:SourceLogged.Remove($ss) }
 
         # Fetch Win32_LogicalDisk map once for VolumeSerialNumber lookup
         $cimDiskMap = @{}
@@ -1236,17 +1277,16 @@ try {
 
                 } else {
                     # =====================================================
-                    # SOURCE USB: copy docs FROM this USB into system
+                    # SOURCE USB: copy docs FROM this USB into system (scans all folders including docs\)
                     # =====================================================
-                    $destDir   = Resolve-SourceDestDir $serial $label
+                    $destDir = Resolve-SourceDestDir $serial $label
                     Sync-IndexCache $IndexFile
-                    $docsOnUsb = Join-Path $root 'docs'
 
                     $copied  = 0
                     $skipped = 0
                     $errors  = 0
 
-                    $files = Get-MatchingFiles $root $docsOnUsb
+                    $files = Get-MatchingFiles $root $null
                     foreach ($file in $files) {
                         if (-not [System.IO.Directory]::Exists($root)) {
                             Write-Log ('SOURCE | Drive removed mid-scan: ' + $drv.DeviceID)
@@ -1295,9 +1335,12 @@ try {
                         }
                     }
 
-                    if ($copied -gt 0 -or $errors -gt 0) {
+                    $sourceKey = $drv.DeviceID + '|' + $serial
+                    if ($copied -gt 0 -or $errors -gt 0 -or (-not $script:SourceLogged.ContainsKey($sourceKey))) {
                         $displayName = if ($label -ne '') { $label + ' (' + $serial + ')' } else { 'NoLabel (' + $serial + ')' }
-                        Write-Log ('SOURCE | ' + $displayName + ' | ' + $copied + ' NEW copied, ' + $skipped + ' skipped (indexed), ' + $errors + ' errors')
+                        $st = $script:LastScanStats
+                        Write-Log ('SOURCE | ' + $displayName + ' [' + $root + '] | seen=' + $st.TotalFiles + ' files/' + $st.Dirs + ' dirs (matched=' + $st.Matched + ', docsExcl=' + $st.ExcludedDocs + ', scanErr=' + $st.ScanErrors + ') | ' + $copied + ' NEW copied, ' + $skipped + ' skipped (indexed), ' + $errors + ' errors')
+                        $script:SourceLogged[$sourceKey] = $true
                     }
                 }
             }
